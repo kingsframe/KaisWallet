@@ -20,6 +20,9 @@ import Squads from "@sqds/sdk";
 import { useLocalStorage } from 'usehooks-ts'
 
 export const HomeView: FC = ({ }) => {
+  const destAddress = new PublicKey('EJ5BiUhi6ifQpZmYBupx839xF1YKvZmj6yq9At3PecEh')
+  const amount = 0.001 * LAMPORTS_PER_SOL;
+
   const wallet = useWallet();
   const { connection } = useConnection();
 
@@ -28,7 +31,10 @@ export const HomeView: FC = ({ }) => {
 
   const [squads, setSquads] = useState<Squads | null>()
   const [multisigAccount, setMultisigAccount] = useLocalStorage('multisigAccount', null)
-  const [txPDA, setTxPDA] = useLocalStorage('msTransaction', null)
+  const [txPDA, setTxPDA] = useLocalStorage('txPDA', null)
+  const [txStatus, setTxStatus] = useLocalStorage('txStatus', null)
+  const [transactionIndex, setTransactionIndex] = useLocalStorage('transactionIndex', null)
+  const [ixPDA, setIxPDA] = useLocalStorage('ixPDA', null)
 
   useEffect(() => {
     if (wallet.publicKey) {
@@ -46,9 +52,6 @@ export const HomeView: FC = ({ }) => {
   }, [wallet])
 
   const onTransfer = async () => {
-    const destAddress = Keypair.generate().publicKey;
-    const amount = 0.001 * LAMPORTS_PER_SOL;
-
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
@@ -75,7 +78,6 @@ export const HomeView: FC = ({ }) => {
     setMultisigAccount(newMultisigAccount)
     console.log('account created: ', newMultisigAccount)
     console.log('balance after MS create: ', balance)
-
   }
 
   const createMSTransaction = async () => {
@@ -93,8 +95,63 @@ export const HomeView: FC = ({ }) => {
     console.log("ms pubkey used to create transaction: ", multisigAccount.publicKey)
     const newMsTransaction = await squads.createTransaction(new PublicKey(multisigAccount.publicKey), authorityIndex);
     setTxPDA(newMsTransaction.publicKey.toString())
+    setTxStatus(newMsTransaction.status)
+    setTransactionIndex(newMsTransaction.transactionIndex)
     console.log('new Ms transaction created: ', newMsTransaction)
     console.log('balance after MS create transaction: ', balance)
+  }
+
+  const addInstruction = async () => {
+    if (!squads) {
+      console.log("squads not found:", wallet)
+      return
+    }
+
+    if (!multisigAccount) {
+      console.log("multisig account not found, please create a new multisig")
+      return
+    }
+
+    if (!txPDA) {
+      console.log("multisig transaction account not found, please create a new ms transaction")
+      return
+    }
+
+    console.log("ms transaction used to add instruction: ", txPDA)
+    const transferIx = SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: destAddress,
+      lamports: amount,
+    })
+    const newMsIx = await squads.addInstruction(new PublicKey(txPDA), transferIx)
+    setIxPDA(newMsIx.publicKey.toString())
+    console.log('new Ms instruction created: ', newMsIx)
+    console.log('balance afterwards: ', balance)
+  }
+
+  const activateMsTransaction = async () => {
+    // TODO check if status is already active
+    if (!squads) {
+      console.log("squads not found:", wallet)
+      return
+    }
+
+    if (!multisigAccount) {
+      console.log("multisig account not found, please create a new multisig")
+      return
+    }
+
+    if (!txPDA) {
+      console.log("multisig transaction account not found, please create a new ms transaction")
+      return
+    }
+
+    console.log("the ms transaction about to be activated: ", txPDA)
+    const currentMsTransaction = await squads.activateTransaction(new PublicKey(txPDA));
+    setTxStatus(JSON.stringify(currentMsTransaction.status))
+    setTransactionIndex(currentMsTransaction.transactionIndex)
+    console.log('the Ms transaction activated: ', currentMsTransaction)
+    console.log('balance afterwards: ', balance)
   }
 
   return (
@@ -110,7 +167,7 @@ export const HomeView: FC = ({ }) => {
         </h4> */}
         <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
           <pre data-prefix=">">
-            <code className="truncate">LocalStorage Multisig  </code>
+            <code className="truncate">LocalStorage msPDA</code>
             {multisigAccount && <>
               <p>PubKey: {multisigAccount.publicKey}</p>
               <p>Threshold: {multisigAccount.threshold}</p>
@@ -123,9 +180,19 @@ export const HomeView: FC = ({ }) => {
         </div>
         <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
           <pre data-prefix=">">
-            <code className="truncate">Multisig Transactions Created</code>
+            <code className="truncate">LocalStorage txPDA</code>
             {txPDA && <>
               <p>PubKey: {txPDA}</p>
+              <p>Status: {JSON.stringify(txStatus)}</p>
+              <p>TransactionIndex: {transactionIndex}</p>
+            </>}
+          </pre>
+        </div>
+        <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
+          <pre data-prefix=">">
+            <code className="truncate">LocalStorage ixPDA</code>
+            {ixPDA && <>
+              <p>PubKey: {ixPDA}</p>
             </>}
           </pre>
         </div>
@@ -154,6 +221,20 @@ export const HomeView: FC = ({ }) => {
           onClick={createMSTransaction}
         >
           <span>Create a MultiSig Transaction</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={addInstruction}
+        >
+          <span>Add an Instruction</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={activateMsTransaction}
+        >
+          <span>Activate Transaction</span>
         </button>
       </div>
     </div>

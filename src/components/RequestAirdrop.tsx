@@ -1,12 +1,15 @@
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { LAMPORTS_PER_SOL, TransactionSignature } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, PublicKey, TransactionSignature } from '@solana/web3.js';
 import { FC, useCallback } from 'react';
 import { notify } from "../utils/notifications";
 import useUserSOLBalanceStore from '../stores/useUserSOLBalanceStore';
 
-export const RequestAirdrop: FC = () => {
+type RequestAirdropT = {
+    publicKey: PublicKey
+}
+
+export const RequestAirdrop: FC<RequestAirdropT> = ({ publicKey }) => {
     const { connection } = useConnection();
-    const { publicKey } = useWallet();
     const { getUserSOLBalance } = useUserSOLBalanceStore();
 
     const onClick = useCallback(async () => {

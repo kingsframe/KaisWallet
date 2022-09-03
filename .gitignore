@@ -39,5 +39,6 @@ yarn-error.log*
 # logs
 *.log
 
-# yarn
-.yarn 
+# yarn 
+.yarn/
+.yarnrc.yml

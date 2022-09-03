@@ -11,8 +11,10 @@ import pkg from '../../../package.json';
 
 // Store
 import useUserSOLBalanceStore from '../../stores/useUserSOLBalanceStore';
-import { WalletNotConnectedError } from '@solana/wallet-adapter-base';
-import { Keypair, SystemProgram, Transaction } from '@solana/web3.js';
+import { Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction } from '@solana/web3.js';
+
+// MS
+import Squads from "@sqds/sdk";
 
 export const HomeView: FC = ({ }) => {
   const wallet = useWallet();
@@ -21,6 +23,9 @@ export const HomeView: FC = ({ }) => {
   const balance = useUserSOLBalanceStore((s) => s.balance)
   const { getUserSOLBalance } = useUserSOLBalanceStore()
 
+  const [squads, setSquads] = useState<Squads | null>()
+  const [multisigAccount, setMultisigAccount] = useState()
+
   useEffect(() => {
     if (wallet.publicKey) {
       console.log(wallet.publicKey.toBase58())
@@ -28,25 +33,44 @@ export const HomeView: FC = ({ }) => {
     }
   }, [wallet.publicKey, connection, getUserSOLBalance])
 
+  useEffect(() => {
+    if (wallet) {
+      // By default, the canonical Program IDs for SquadsMPL and ProgramManager will be used
+      // The 'wallet' passed in will be the signer/feePayer on all transactions through the Squads object.
+      setSquads(Squads.devnet(wallet)); // or Squads.devnet(...); Squads.mainnet(...)
+    }
+  }, [wallet])
+
   const onTransfer = async () => {
-    if (!wallet.publicKey) throw new WalletNotConnectedError();
+    const destAddress = Keypair.generate().publicKey;
+    const amount = 0.001 * LAMPORTS_PER_SOL;
 
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
-        toPubkey: Keypair.generate().publicKey,
-        lamports: 1,
+        toPubkey: destAddress,
+        lamports: amount,
       })
     );
 
-    const {
-      context: { slot: minContextSlot },
-      value: { blockhash, lastValidBlockHeight }
-    } = await connection.getLatestBlockhashAndContext();
+    const signature = await wallet.sendTransaction(transaction, connection);
 
-    const signature = await wallet.sendTransaction(transaction, connection, { minContextSlot });
+    await connection.confirmTransaction(signature, 'confirmed');
+    console.log('balance after transfer: ', balance)
+  }
 
-    await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature });
+  const createMS = async () => {
+    if (!squads) {
+      console.log("squads not found:", wallet)
+      return
+    }
+    const threshold = 1
+    const createKey = Keypair.generate().publicKey;
+    const members = [wallet.publicKey];
+    const newMultisigAccount = await squads.createMultisig(threshold, createKey, members);
+    // setMultisigAccount(newMultisigAccount)
+    console.log('account created: ', newMultisigAccount)
+
   }
 
   return (
@@ -69,16 +93,21 @@ export const HomeView: FC = ({ }) => {
           <RequestAirdrop />
           {/* {wallet.publicKey && <p>Public Key: {wallet.publicKey.toBase58()}</p>} */}
           {wallet && <p>SOL Balance: {(balance || 0).toLocaleString()}</p>}
-
-          <div>
-            <button
-              className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
-              onClick={onTransfer}
-            >
-              <span>Transfer</span>
-            </button>
-          </div>
         </div>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={onTransfer}
+        >
+          <span>Transfer</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={createMS}
+        >
+          <span>Create a MultiSig</span>
+        </button>
       </div>
     </div>
   );

@@ -179,6 +179,37 @@ export const HomeView: FC = ({ }) => {
     console.log('balance afterwards: ', balance)
   }
 
+  const executeMsTransaction = async () => {
+    // TODO check if status is execute ready
+    if (!squads) {
+      console.log("squads not found:", wallet)
+      return
+    }
+
+    if (!multisigAccount) {
+      console.log("multisig account not found, please create a new multisig")
+      return
+    }
+
+    if (!txPDA) {
+      console.log("multisig transaction account not found, please create a new ms transaction")
+      return
+    }
+
+    console.log("the ms transaction about to be executed: ", txPDA)
+    const currentTransaction = await squads.executeTransaction(new PublicKey(txPDA));
+    setTxStatus(JSON.stringify(currentTransaction.status))
+    setTransactionIndex(currentTransaction.transactionIndex)
+    console.log('the Ms transaction executed: ', currentTransaction)
+
+    // const currentExecuteInstruction = await squads.buildExecuteTransaction(new PublicKey(txPDA));
+    // const transaction = new Transaction().add(currentExecuteInstruction);
+    // const signature = await wallet.sendTransaction(transaction, connection);
+    // await connection.confirmTransaction(signature, 'confirmed');
+
+    console.log('balance afterwards: ', balance)
+  }
+
   return (
 
     <div className="md:hero mx-auto p-4">
@@ -267,6 +298,13 @@ export const HomeView: FC = ({ }) => {
           onClick={approveMsTransaction}
         >
           <span>Approve Transaction</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={executeMsTransaction}
+        >
+          <span>Execute Transaction</span>
         </button>
       </div>
     </div>

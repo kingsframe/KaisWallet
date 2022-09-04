@@ -154,6 +154,31 @@ export const HomeView: FC = ({ }) => {
     console.log('balance afterwards: ', balance)
   }
 
+  const approveMsTransaction = async () => {
+    // TODO check if status is already active
+    if (!squads) {
+      console.log("squads not found:", wallet)
+      return
+    }
+
+    if (!multisigAccount) {
+      console.log("multisig account not found, please create a new multisig")
+      return
+    }
+
+    if (!txPDA) {
+      console.log("multisig transaction account not found, please create a new ms transaction")
+      return
+    }
+
+    console.log("the ms transaction about to be approved: ", txPDA)
+    const currentMsTransaction = await squads.approveTransaction(new PublicKey(txPDA));
+    setTxStatus(JSON.stringify(currentMsTransaction.status))
+    setTransactionIndex(currentMsTransaction.transactionIndex)
+    console.log('the Ms transaction approved: ', currentMsTransaction)
+    console.log('balance afterwards: ', balance)
+  }
+
   return (
 
     <div className="md:hero mx-auto p-4">
@@ -235,6 +260,13 @@ export const HomeView: FC = ({ }) => {
           onClick={activateMsTransaction}
         >
           <span>Activate Transaction</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={approveMsTransaction}
+        >
+          <span>Approve Transaction</span>
         </button>
       </div>
     </div>

@@ -1,6 +1,5 @@
 // Next, React
-import { FC, useEffect, useState } from 'react';
-import Link from 'next/link';
+import { FC, useCallback, useEffect, useState } from 'react';
 
 // Wallet
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
@@ -11,17 +10,18 @@ import pkg from '../../../package.json';
 
 // Store
 import useUserSOLBalanceStore from '../../stores/useUserSOLBalanceStore';
-import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 
 // MS
 import Squads from "@sqds/sdk";
 
 // Local Storage
 import { useLocalStorage } from 'usehooks-ts'
+import { MultisigAccount } from '@sqds/sdk/lib/sdk/src/types';
 
 export const HomeView: FC = ({ }) => {
   const destAddress = new PublicKey('EJ5BiUhi6ifQpZmYBupx839xF1YKvZmj6yq9At3PecEh')
-  const amount = 0.001 * LAMPORTS_PER_SOL;
+  const transferAmount = 1 * LAMPORTS_PER_SOL;
 
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -30,7 +30,9 @@ export const HomeView: FC = ({ }) => {
   const { getUserSOLBalance } = useUserSOLBalanceStore()
 
   const [squads, setSquads] = useState<Squads | null>()
-  const [multisigAccount, setMultisigAccount] = useLocalStorage('multisigAccount', null)
+  const [multisigAccount, setMultisigAccount] = useState<MultisigAccount | null>()
+  const [vaultPDA, setVaultPDA] = useState<PublicKey | null>()
+  const [vaultBalance, setVaultBalance] = useState<number>(0)
   const [txPDA, setTxPDA] = useLocalStorage('txPDA', null)
   const [txStatus, setTxStatus] = useLocalStorage('txStatus', null)
   const [transactionIndex, setTransactionIndex] = useLocalStorage('transactionIndex', null)
@@ -51,11 +53,11 @@ export const HomeView: FC = ({ }) => {
     }
   }, [wallet])
 
-  const onTransfer = async () => {
+  const transfer = async (from: PublicKey, to: PublicKey, amount: number) => {
     const transaction = new Transaction().add(
       SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: destAddress,
+        fromPubkey: from,
+        toPubkey: to,
         lamports: amount,
       })
     );
@@ -74,11 +76,33 @@ export const HomeView: FC = ({ }) => {
     const threshold = 1
     const createKey = Keypair.generate().publicKey;
     const members = [wallet.publicKey];
-    const newMultisigAccount = await squads.createMultisig(threshold, createKey, members);
+    const newMultisigAccount: MultisigAccount = await squads.createMultisig(threshold, createKey, members);
+    const vault = await squads.getAuthorityPDA(newMultisigAccount.publicKey, 1)
+
     setMultisigAccount(newMultisigAccount)
+    setVaultPDA(vault)
     console.log('account created: ', newMultisigAccount)
-    console.log('balance after MS create: ', balance)
+    console.log('vault created: ', vault)
+    console.log('wallet balance after MS create: ', balance)
   }
+
+  const depositToVault = async (vaultPDAKey: PublicKey, amount: number) => {
+    await transfer(wallet.publicKey, vaultPDAKey, amount)
+  }
+
+  const getVaultBalance = useCallback(async (vaultPDAKey: PublicKey, connection: Connection) => {
+    const balance = await connection.getBalance(
+      vaultPDAKey,
+      'confirmed'
+    );
+    setVaultBalance(balance / LAMPORTS_PER_SOL);
+  }, [])
+
+  useEffect(() => {
+    if (connection && vaultPDA) {
+      getVaultBalance(vaultPDA, connection)
+    }
+  }, [getVaultBalance, vaultPDA, connection, balance, txStatus])
 
   const createMSTransaction = async () => {
     if (!squads) {
@@ -121,7 +145,7 @@ export const HomeView: FC = ({ }) => {
     const transferIx = SystemProgram.transfer({
       fromPubkey: wallet.publicKey,
       toPubkey: destAddress,
-      lamports: amount,
+      lamports: transferAmount,
     })
     const newMsIx = await squads.addInstruction(new PublicKey(txPDA), transferIx)
     setIxPDA(newMsIx.publicKey.toString())
@@ -223,35 +247,39 @@ export const HomeView: FC = ({ }) => {
         </h4> */}
         <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
           <pre data-prefix=">">
-            <code className="truncate">LocalStorage msPDA</code>
+            <code className="truncate">state msPDA</code>
             {multisigAccount && <>
-              <p>PubKey: {multisigAccount.publicKey}</p>
+              <p>PubKey: {multisigAccount.publicKey.toString()}</p>
               <p>Threshold: {multisigAccount.threshold}</p>
-              <p>Keys: {multisigAccount.keys}</p>
+              <p>Keys: {multisigAccount.keys.map(acct => <>{acct.toString()}</>)}</p>
               <p>Tx Index: {multisigAccount.transactionIndex}</p>
               <p>MS Change Index: {multisigAccount.msChangeIndex}</p>
             </>
             }
-          </pre>
-        </div>
-        <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
-          <pre data-prefix=">">
+
+            <code className="truncate">State vaultPDA</code>
+            {vaultPDA && <>
+              <p>vaultPDA Public key: {vaultPDA.toString()}</p>
+              <p>vaultPDA Balance: {vaultBalance}</p>
+            </>
+            }
+
             <code className="truncate">LocalStorage txPDA</code>
             {txPDA && <>
               <p>PubKey: {txPDA}</p>
               <p>Status: {JSON.stringify(txStatus)}</p>
               <p>TransactionIndex: {transactionIndex}</p>
             </>}
-          </pre>
-        </div>
-        <div className="max-w-md mx-auto mockup-code bg-primary p-6 my-2">
-          <pre data-prefix=">">
+
             <code className="truncate">LocalStorage ixPDA</code>
             {ixPDA && <>
               <p>PubKey: {ixPDA}</p>
             </>}
+
+
           </pre>
         </div>
+
         <div className="text-center">
           <RequestAirdrop publicKey={wallet.publicKey} />
           {/* {wallet.publicKey && <p>Public Key: {wallet.publicKey.toBase58()}</p>} */}
@@ -260,7 +288,7 @@ export const HomeView: FC = ({ }) => {
 
         <button
           className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
-          onClick={onTransfer}
+          onClick={() => transfer(wallet.publicKey, destAddress, transferAmount)}
         >
           <span>Transfer</span>
         </button>
@@ -270,6 +298,13 @@ export const HomeView: FC = ({ }) => {
           onClick={createMS}
         >
           <span>Create a MultiSig</span>
+        </button>
+
+        <button
+          className="px-8 m-2 btn animate-pulse bg-gradient-to-r from-[#9945FF] to-[#14F195] hover:from-pink-500 hover:to-yellow-500 ..."
+          onClick={() => depositToVault(vaultPDA, 0.5)}
+        >
+          <span>Deposit to Vault</span>
         </button>
 
         <button
